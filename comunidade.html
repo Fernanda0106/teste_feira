@@ -963,6 +963,12 @@
          JAVASCRIPT
          ========================================================= -->
 
+    <!-- Firebase (banco de dados compartilhado) -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="firebase-config.js"></script>
+
     <script>
 
         const forumWindow =
@@ -980,55 +986,23 @@
         const messageCounter =
             document.getElementById("messageCounter");
 
+        const ROTA_FORUM = "forum";
 
-        const CHAVE_FORUM =
-            "robloxForumMessages";
+        const LIMITE_MENSAGENS = 500;
 
+        const INTERVALO_ENVIO = 3000;
 
-        /* =====================================================
-           CARREGAR MENSAGENS
-           ===================================================== */
+        let totalMensagens = 0;
 
-        function carregarMensagensForum() {
+        let ultimoEnvio = 0;
 
-            let mensagens = [];
-
-            try {
-
-                mensagens =
-                    JSON.parse(
-                        localStorage.getItem(CHAVE_FORUM)
-                    ) || [];
-
-            } catch {
-
-                mensagens = [];
-
-            }
-
-
-            mensagens.forEach(function(mensagem) {
-
-                adicionarNaTelaForum(
-                    mensagem.usuario,
-                    mensagem.texto
-                );
-
-            });
-
-
-            atualizarContador(mensagens.length);
-
-            rolarForumNoFim();
-
-        }
-
+        let rolarProximaMensagem = false;
 
         /* =====================================================
            ADICIONAR MENSAGEM NA TELA
            ===================================================== */
 
-        function adicionarNaTelaForum(usuario, texto) {
+        function adicionarNaTelaForum(usuario, texto, chave) {
 
             const novaLinha =
                 document.createElement("div");
@@ -1036,6 +1010,11 @@
             novaLinha.className =
                 "forum-message";
 
+            if (chave) {
+
+                novaLinha.dataset.chave = chave;
+
+            }
 
             const nome =
                 document.createElement("span");
@@ -1046,7 +1025,6 @@
             nome.textContent =
                 "@" + usuario;
 
-
             const mensagem =
                 document.createElement("span");
 
@@ -1056,7 +1034,6 @@
             mensagem.textContent =
                 texto;
 
-
             novaLinha.appendChild(nome);
 
             novaLinha.appendChild(mensagem);
@@ -1064,7 +1041,6 @@
             forumWindow.appendChild(novaLinha);
 
         }
-
 
         /* =====================================================
            CONTADOR
@@ -1086,7 +1062,6 @@
 
         }
 
-
         /* =====================================================
            ROLAR PARA O FINAL
            ===================================================== */
@@ -1098,6 +1073,104 @@
 
         }
 
+        function estaPertoDoFim() {
+
+            return (
+                forumWindow.scrollHeight -
+                forumWindow.scrollTop -
+                forumWindow.clientHeight
+            ) < 80;
+
+        }
+
+        /* =====================================================
+           ESCUTAR MENSAGENS NO FIREBASE (tempo real)
+           ===================================================== */
+
+        function iniciarForum() {
+
+            if (!window.conexaoDB) {
+
+                console.error("Sem conexão com o banco de dados.");
+
+                return;
+
+            }
+
+            const consulta =
+                window.conexaoDB
+                    .ref(ROTA_FORUM)
+                    .limitToLast(LIMITE_MENSAGENS);
+
+            consulta.on(
+                "child_added",
+                function(snapshot) {
+
+                    const dados = snapshot.val();
+
+                    if (!dados) {
+
+                        return;
+
+                    }
+
+                    const noFim =
+                        estaPertoDoFim() ||
+                        rolarProximaMensagem;
+
+                    rolarProximaMensagem = false;
+
+                    adicionarNaTelaForum(
+                        dados.usuario,
+                        dados.texto,
+                        snapshot.key
+                    );
+
+                    totalMensagens++;
+
+                    atualizarContador(totalMensagens);
+
+                    if (noFim) {
+
+                        rolarForumNoFim();
+
+                    }
+
+                },
+                function(erro) {
+
+                    console.error(
+                        "Erro ao carregar mensagens:",
+                        erro
+                    );
+
+                }
+            );
+
+            consulta.on(
+                "child_removed",
+                function(snapshot) {
+
+                    const elemento =
+                        forumWindow.querySelector(
+                            '[data-chave="' + snapshot.key + '"]'
+                        );
+
+                    if (elemento) {
+
+                        elemento.remove();
+
+                    }
+
+                    totalMensagens =
+                        Math.max(0, totalMensagens - 1);
+
+                    atualizarContador(totalMensagens);
+
+                }
+            );
+
+        }
 
         /* =====================================================
            ENVIAR MENSAGEM
@@ -1109,10 +1182,8 @@
                 forumUserInput.value.trim() ||
                 "Anônimo";
 
-
             const texto =
                 forumMsgInput.value.trim();
-
 
             if (texto === "") {
 
@@ -1122,61 +1193,56 @@
 
             }
 
+            if (!window.conexaoDB) {
 
-            adicionarNaTelaForum(
-                usuario,
-                texto
-            );
+                alert("Não foi possível conectar ao servidor. Tente novamente.");
 
-
-            let mensagens = [];
-
-            try {
-
-                mensagens =
-                    JSON.parse(
-                        localStorage.getItem(CHAVE_FORUM)
-                    ) || [];
-
-            } catch {
-
-                mensagens = [];
+                return;
 
             }
 
+            // Evita envios em sequência (spam)
 
-            mensagens.push({
+            const agora = Date.now();
 
-                usuario: usuario,
+            if (agora - ultimoEnvio < INTERVALO_ENVIO) {
 
-                texto: texto
+                alert("Aguarde alguns segundos antes de enviar outra mensagem.");
 
-            });
+                return;
 
+            }
 
-            localStorage.setItem(
+            ultimoEnvio = agora;
 
-                CHAVE_FORUM,
+            rolarProximaMensagem = true;
 
-                JSON.stringify(mensagens)
+            window.conexaoDB
+                .ref(ROTA_FORUM)
+                .push({
 
-            );
+                    usuario: usuario.slice(0, 40),
 
+                    texto: texto.slice(0, 500),
 
-            atualizarContador(
-                mensagens.length
-            );
+                    ts: firebase.database.ServerValue.TIMESTAMP
 
+                })
+                .catch(function(erro) {
+
+                    console.error(erro);
+
+                    ultimoEnvio = 0;
+
+                    alert("Não foi possível enviar a mensagem. Tente novamente.");
+
+                });
 
             forumMsgInput.value = "";
 
             forumMsgInput.focus();
 
-
-            rolarForumNoFim();
-
         }
-
 
         /* =====================================================
            ENTER PARA ENVIAR
@@ -1186,7 +1252,6 @@
             "click",
             enviarMensagemForum
         );
-
 
         forumMsgInput.addEventListener(
             "keypress",
@@ -1201,18 +1266,16 @@
             }
         );
 
-
         /* =====================================================
            MODERAÇÃO
            ===================================================== */
 
-        function limparConsoleSecreto() {
+        async function limparConsoleSecreto() {
 
             const confirmar =
                 confirm(
-                    "Deseja apagar todas as mensagens do fórum neste navegador?"
+                    "Deseja apagar todas as mensagens do fórum para TODOS os visitantes?"
                 );
-
 
             if (!confirmar) {
 
@@ -1220,19 +1283,30 @@
 
             }
 
+            if (!window.conexaoDB) {
 
-            const senha =
-                prompt(
-                    "Digite a senha de administrador:"
-                );
+                alert("Não foi possível conectar ao servidor.");
 
+                return;
 
-            if (senha === "ciencia2026") {
+            }
 
-                localStorage.removeItem(
-                    CHAVE_FORUM
-                );
+            // Só o administrador (logado no Firebase) pode apagar
 
+            const logado =
+                await window.conexaoAdminLogin();
+
+            if (!logado) {
+
+                return;
+
+            }
+
+            try {
+
+                await window.conexaoDB
+                    .ref(ROTA_FORUM)
+                    .remove();
 
                 forumWindow.innerHTML = `
 
@@ -1249,26 +1323,25 @@
 
                 `;
 
+                totalMensagens = 0;
 
                 atualizarContador(0);
-
 
                 alert(
                     "Mensagens apagadas com sucesso!"
                 );
 
-            }
+            } catch (erro) {
 
-            else if (senha !== null) {
+                console.error(erro);
 
                 alert(
-                    "Senha incorreta!"
+                    "Não foi possível apagar as mensagens."
                 );
 
             }
 
         }
-
 
         /* =====================================================
            INICIAR
@@ -1278,7 +1351,7 @@
             "DOMContentLoaded",
             function() {
 
-                carregarMensagensForum();
+                iniciarForum();
 
             }
         );
