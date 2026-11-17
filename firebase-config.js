@@ -6,18 +6,17 @@
    ========================================================= */
 
 const firebaseConfig = {
-    apiKey: "AIzaSyD_2LiVnc5jB2Cm_kE5pZ11--PcZ_3IVVc",
-    authDomain: "conexao-global.firebaseapp.com",
-    databaseURL: "https://conexao-global-default-rtdb.firebaseio.com",
-    projectId: "conexao-global",
-    storageBucket: "conexao-global.firebasestorage.app",
-    messagingSenderId: "677064714325",
-    appId: "1:677064714325:web:5ee71caaaac9764c718cdc"
+    apiKey: "AIzaSyCsw5s4DXkKF-1GubqXHfwWCIEJqFNU9pA",
+    authDomain: "conexao-global-oficial.firebaseapp.com",
+    databaseURL: "https://conexao-global-oficial-default-rtdb.firebaseio.com",
+    projectId: "conexao-global-oficial",
+    storageBucket: "conexao-global-oficial.firebasestorage.app",
+    messagingSenderId: "484287130297",
+    appId: "1:484287130297:web:46dbb36e9a20c0f6138968"
 };
 
 /*
  * E-mail do administrador (criado em Authentication no console).
- * A SENHA não fica no código: ela só existe no Firebase.
  */
 const EMAIL_ADMIN = "admin@conexaoglobal.com";
 
